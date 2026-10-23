@@ -1,0 +1,62 @@
+name: PocketLock APK bauen
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Quellcode laden
+        uses: actions/checkout@v4
+
+      - name: Java 17 einrichten
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK einrichten
+        uses: android-actions/setup-android@v3
+
+      - name: SDK Plattform installieren
+        run: sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
+
+      - name: Gradle einrichten
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: APK erstellen
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: APK benennen
+        run: cp app/build/outputs/apk/debug/app-debug.apk PocketLock-0.2.1-debug.apk
+
+      - name: APK als Build-Artefakt sichern
+        uses: actions/upload-artifact@v4
+        with:
+          name: PocketLock-APK
+          path: PocketLock-0.2.1-debug.apk
+          if-no-files-found: error
+
+      - name: Einzelne APK als Release bereitstellen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          TAG="v0.2.1"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" PocketLock-0.2.1-debug.apk --clobber
+          else
+            gh release create "$TAG" PocketLock-0.2.1-debug.apk \
+              --target "$GITHUB_SHA" \
+              --title "PocketLock 0.2.1 Android APK" \
+              --notes "Debug-APK zum lokalen Test. Benutzerinitiierter Taschenmodus, Katzenmotiv und Schnellschalter. Nicht auf physischem Android-Gerät getestet."
+          fi
